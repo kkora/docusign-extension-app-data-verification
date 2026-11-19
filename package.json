@@ -27,6 +27,7 @@
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
     "morgan": "^1.10.0",
+    "plaid": "^51.0.0",
     "pug": "^3.0.2",
     "ts-command-line-args": "^2.5.0"
   },

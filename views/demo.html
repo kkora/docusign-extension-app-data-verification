@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Bank Account Verification Demo</title>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; }
+    button { padding: 8px 16px; margin: 4px 0; cursor: pointer; }
+    .account { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin: 12px 0; }
+    .account label { display: block; margin-top: 6px; font-size: 13px; }
+    .account input { width: 100%; padding: 4px; box-sizing: border-box; }
+    pre { background: #f4f4f4; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    .verified-true { color: green; font-weight: bold; }
+    .verified-false { color: #b00020; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Bank Account Verification Demo</h1>
+  <p>Connects a sandbox bank account through Plaid Link, then calls this app's
+    <code>/api/verify/bankAccount</code> and <code>/api/verify/bankAccountOwner</code> endpoints
+    with the numbers Plaid returns.</p>
+
+  <button id="connect-btn">Connect a bank account</button>
+  <div id="accounts"></div>
+  <h3>Results</h3>
+  <pre id="results">(no calls made yet)</pre>
+
+  <script>
+    let jwtToken = null;
+
+    const getToken = async () => {
+      if (jwtToken) return jwtToken;
+      const res = await fetch('/api/demo/token');
+      const data = await res.json();
+      jwtToken = data.access_token;
+      return jwtToken;
+    };
+
+    const logResult = (label, data) => {
+      const pre = document.getElementById('results');
+      pre.textContent = `${label}\n${JSON.stringify(data, null, 2)}\n\n` + pre.textContent;
+    };
+
+    const callApi = async (path, body) => {
+      const token = await getToken();
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    };
+
+    const renderAccount = account => {
+      const container = document.getElementById('accounts');
+      const [firstName = '', ...rest] = (account.ownerNames[0] || '').split(' ');
+      const lastName = rest.join(' ');
+
+      const div = document.createElement('div');
+      div.className = 'account';
+      div.innerHTML = `
+        <strong>${account.institutionName}</strong> &mdash; ${account.accountType} ****${account.accountNumber.slice(-4)}
+        <label>First name <input class="first-name" value="${firstName}"></label>
+        <label>Last name <input class="last-name" value="${lastName}"></label>
+        <button class="verify-account-btn">Verify account</button>
+        <button class="verify-owner-btn">Verify owner</button>
+      `;
+
+      div.querySelector('.verify-account-btn').addEventListener('click', async () => {
+        const result = await callApi('/api/verify/bankAccount', {
+          accountNumber: account.accountNumber,
+          routingNumber: account.routingNumber,
+          accountType: account.accountType,
+        });
+        logResult('POST /api/verify/bankAccount', result);
+      });
+
+      div.querySelector('.verify-owner-btn').addEventListener('click', async () => {
+        const result = await callApi('/api/verify/bankAccountOwner', {
+          accountNumber: account.accountNumber,
+          routingNumber: account.routingNumber,
+          accountType: account.accountType,
+          firstName: div.querySelector('.first-name').value,
+          lastName: div.querySelector('.last-name').value,
+        });
+        logResult('POST /api/verify/bankAccountOwner', result);
+      });
+
+      container.appendChild(div);
+    };
+
+    document.getElementById('connect-btn').addEventListener('click', async () => {
+      const token = await getToken();
+
+      const linkTokenRes = await fetch('/api/link/token/create', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const { link_token } = await linkTokenRes.json();
+
+      const handler = Plaid.create({
+        token: link_token,
+        onSuccess: async (publicToken, metadata) => {
+          const exchangeRes = await callApi('/api/link/token/exchange', {
+            public_token: publicToken,
+            institutionName: metadata.institution ? metadata.institution.name : 'Unknown institution',
+          });
+          document.getElementById('accounts').innerHTML = '';
+          exchangeRes.accounts.forEach(renderAccount);
+        },
+      });
+
+      handler.open();
+    });
+  </script>
+</body>
+</html>

@@ -1,6 +1,12 @@
 import { BankAccountOwnerBody, BankAccountOwnerResponse } from '../models/dataVerification';
-import { SAMPLE_BANK_ACCOUNTS } from '../constants/sampleData';
+import { findVerifiedAccount } from './plaidAccountStore';
 import { IReq, IRes } from '../utils/types';
+
+const ownerNameMatches = (ownerNames: string[], firstName: string, lastName: string) =>
+  ownerNames.some(name => {
+    const lowerName = name.toLowerCase();
+    return lowerName.includes(firstName.toLowerCase()) && lowerName.includes(lastName.toLowerCase());
+  });
 
 export const verifyBankAccountOwner = (req: IReq<BankAccountOwnerBody>, res: IRes) => {
   const {
@@ -27,16 +33,14 @@ export const verifyBankAccountOwner = (req: IReq<BankAccountOwnerBody>, res: IRe
       throw new Error('First name and last name cannot be empty.');
     }
 
-    // Mock database lookup
-    const accountFound = SAMPLE_BANK_ACCOUNTS.find(acc =>
-      acc.accountNumber === accountNumber &&
-      acc.routingNumber === routingNumber &&
-      acc.firstName.toLowerCase() === firstName.toLowerCase() &&
-      acc.lastName.toLowerCase() === lastName.toLowerCase() &&
-      acc.accountType.toLowerCase() === accountType.toLowerCase()
-    );
+    // Looked up from the Plaid-backed store populated by the Link flow (see plaidLink.service.ts)
+    const accountFound = findVerifiedAccount(accountNumber, routingNumber);
 
-    if (accountFound) {
+    if (
+      accountFound &&
+      accountFound.accountType.toLowerCase() === accountType.toLowerCase() &&
+      ownerNameMatches(accountFound.ownerNames, firstName, lastName)
+    ) {
       const result: BankAccountOwnerResponse = { verified: true }
       return res.json(result);
     } else {

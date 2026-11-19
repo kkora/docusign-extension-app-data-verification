@@ -1,5 +1,5 @@
 import { BankAccountBody, BankAccountResponse } from '../models/dataVerification';
-import { SAMPLE_BANK_ACCOUNTS } from '../constants/sampleData';
+import { findVerifiedAccount } from './plaidAccountStore';
 import { IReq, IRes } from '../utils/types';
 
 export const verifyBankAccount = (req: IReq<BankAccountBody>, res: IRes) => {
@@ -22,14 +22,10 @@ export const verifyBankAccount = (req: IReq<BankAccountBody>, res: IRes) => {
       throw new Error('Invalid account type. Only "checking" and "savings" are accepted.');
     }
 
-    // Mock database lookup
-    const accountFound = SAMPLE_BANK_ACCOUNTS.find(acc =>
-      acc.accountNumber === accountNumber &&
-      acc.routingNumber === routingNumber &&
-      acc.accountType.toLowerCase() === accountType.toLowerCase()
-    );
+    // Looked up from the Plaid-backed store populated by the Link flow (see plaidLink.service.ts)
+    const accountFound = findVerifiedAccount(accountNumber, routingNumber);
 
-    if (accountFound) {
+    if (accountFound && accountFound.accountType.toLowerCase() === accountType.toLowerCase()) {
       const result: BankAccountResponse = { verified: true }
       return res.json(result);
     } else {

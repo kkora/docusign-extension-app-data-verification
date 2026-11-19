@@ -29,6 +29,15 @@ const paths = {
       Post: '/typeaheadAddress'
     }
   },
+  Link: {
+    Base: '/link',
+    TokenCreate: {
+      Post: '/token/create',
+    },
+    TokenExchange: {
+      Post: '/token/exchange',
+    },
+  },
   Auth: {
     Base: '/oauth',
     Authorize: {
@@ -39,6 +48,12 @@ const paths = {
     },
     UserInfo: {
       Get: '/userinfo',
+    },
+  },
+  Demo: {
+    Base: '/demo',
+    Token: {
+      Get: '/token',
     },
   },
 };

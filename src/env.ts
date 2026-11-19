@@ -4,7 +4,7 @@
 
 /* eslint-disable node/no-process-env */
 
-const { NODE_ENV, PORT, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, AUTHORIZATION_CODE, JWT_SECRET_KEY } = process.env;
+const { NODE_ENV, PORT, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, AUTHORIZATION_CODE, JWT_SECRET_KEY, PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV } = process.env;
 
 if (!NODE_ENV) {
   throw new Error('NODE_ENV not set');
@@ -30,6 +30,18 @@ if (!JWT_SECRET_KEY) {
   throw new Error('JWT_SECRET_KEY not set');
 }
 
+if (!PLAID_CLIENT_ID) {
+  throw new Error('PLAID_CLIENT_ID not set');
+}
+
+if (!PLAID_SECRET) {
+  throw new Error('PLAID_SECRET not set');
+}
+
+if (!PLAID_ENV) {
+  throw new Error('PLAID_ENV not set');
+}
+
 export default {
   NODE_ENV,
   PORT,
@@ -37,4 +49,7 @@ export default {
   OAUTH_CLIENT_SECRET,
   AUTHORIZATION_CODE,
   JWT_SECRET_KEY,
+  PLAID_CLIENT_ID,
+  PLAID_SECRET,
+  PLAID_ENV,
 };
