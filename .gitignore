@@ -3,3 +3,5 @@ dist/
 **/**/*.log
 development.env
 package-lock.json
+
+.vscode/
