@@ -1,0 +1,654 @@
+{
+  "info": {
+    "name": "DocuSign Extension App Data Verification — Plaid Bank Flow",
+    "description": "Scripted end-to-end test of the Plaid-backed bank account verification flow: get a JWT, create a Plaid sandbox public token, exchange it through the app's Link endpoint, then call the verify endpoints. See doc/plaid-bank-account-verification-implementation-plan.md for background.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "plaid_base_url",
+      "value": "https://sandbox.plaid.com"
+    },
+    {
+      "key": "plaid_client_id",
+      "value": "",
+      "description": "PLAID_CLIENT_ID from development.env"
+    },
+    {
+      "key": "plaid_secret",
+      "value": "",
+      "description": "PLAID_SECRET from development.env"
+    },
+    {
+      "key": "institution_id",
+      "value": "ins_56",
+      "description": "Chase (sandbox). Try ins_13 for PNC."
+    },
+    {
+      "key": "institution_name",
+      "value": "Chase"
+    },
+    {
+      "key": "oauth_client_id",
+      "value": "",
+      "description": "OAUTH_CLIENT_ID from development.env"
+    },
+    {
+      "key": "oauth_client_secret",
+      "value": "",
+      "description": "OAUTH_CLIENT_SECRET from development.env (only needed for the client_credentials alternative)"
+    },
+    {
+      "key": "authorization_code",
+      "value": "",
+      "description": "AUTHORIZATION_CODE from development.env — stands in for the code DocuSign would receive on the authorize redirect"
+    },
+    {
+      "key": "redirect_uri",
+      "value": "https://example.com/callback",
+      "description": "Any well-formed URL — the mock authorize endpoint doesn't actually redirect in this flow"
+    },
+    {
+      "key": "oauth_state",
+      "value": "e2e-test-state"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "link_token",
+      "value": ""
+    },
+    {
+      "key": "public_token",
+      "value": ""
+    },
+    {
+      "key": "account_number",
+      "value": ""
+    },
+    {
+      "key": "routing_number",
+      "value": ""
+    },
+    {
+      "key": "account_type",
+      "value": ""
+    },
+    {
+      "key": "owner_first_name",
+      "value": ""
+    },
+    {
+      "key": "owner_last_name",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1 - DocuSign Auth",
+      "item": [
+        {
+          "name": "Authorize",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/oauth/authorize?redirect_uri={{redirect_uri}}&client_id={{oauth_client_id}}&state={{oauth_state}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "oauth",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "redirect_uri",
+                  "value": "{{redirect_uri}}"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{oauth_client_id}}"
+                },
+                {
+                  "key": "state",
+                  "value": "{{oauth_state}}"
+                }
+              ]
+            },
+            "description": "Mirrors the browser redirect DocuSign sends the user through to log in and consent. Renders an HTML page embedding the authorization code (equal to AUTHORIZATION_CODE in development.env) — this call just proves the endpoint accepts DocuSign's client_id/redirect_uri/state. The next request uses {{authorization_code}} directly rather than scraping the HTML."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Token (authorization_code)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code"
+                },
+                {
+                  "key": "code",
+                  "value": "{{authorization_code}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{redirect_uri}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/oauth/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "oauth",
+                "token"
+              ]
+            },
+            "description": "The real grant type DocuSign uses after the user authorizes. Exchanges the authorization code for the access/refresh tokens used by every call below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('access_token', json.access_token);",
+                  "pm.environment.set('access_token', json.access_token);",
+                  "pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "pm.environment.set('refresh_token', json.refresh_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/oauth/userinfo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "oauth",
+                "userinfo"
+              ]
+            },
+            "description": "Validates the token from the previous step is accepted, mirroring DocuSign's userinfo lookup after login."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('sub and email present', () => { pm.expect(json.sub).to.be.a('string'); pm.expect(json.email).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Demo Token [alternative]",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/demo/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "demo",
+                "token"
+              ]
+            },
+            "description": "Shortcut used by the browser demo — skips the authorization_code dance above. Use this instead of the three requests above if you just need a valid JWT and don't care about exercising the DocuSign-style auth flow."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('access_token', json.access_token);",
+                  "pm.environment.set('access_token', json.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OAuth Token (client_credentials) [alternative]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{oauth_client_id}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{oauth_client_secret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/oauth/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "oauth",
+                "token"
+              ]
+            },
+            "description": "Service-to-service alternative grant also supported by the mock auth server, in case the authorization_code flow isn't available in your context."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('access_token', json.access_token);",
+                  "pm.environment.set('access_token', json.access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 - Plaid Link",
+      "item": [
+        {
+          "name": "Create Link Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/link/token/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "link",
+                "token",
+                "create"
+              ]
+            },
+            "description": "Not required for the scripted/curl test track below, but exercises the same endpoint the browser demo calls before launching Plaid Link."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('link_token', json.link_token);",
+                  "pm.environment.set('link_token', json.link_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Plaid Sandbox - Create Public Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"{{plaid_client_id}}\",\n  \"secret\": \"{{plaid_secret}}\",\n  \"institution_id\": \"{{institution_id}}\",\n  \"initial_products\": [\"auth\", \"identity\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{plaid_base_url}}/sandbox/public_token/create",
+              "host": [
+                "{{plaid_base_url}}"
+              ],
+              "path": [
+                "sandbox",
+                "public_token",
+                "create"
+              ]
+            },
+            "description": "Calls Plaid directly (not this app) to simulate a completed Link session for the given sandbox institution, standing in for the browser Link flow's user_good/pass_good login."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('public_token', json.public_token);",
+                  "pm.environment.set('public_token', json.public_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Exchange Public Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"public_token\": \"{{public_token}}\",\n  \"institutionName\": \"{{institution_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/link/token/exchange",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "link",
+                "token",
+                "exchange"
+              ]
+            },
+            "description": "Exchanges the sandbox public_token for real account/routing numbers and owner identity, and saves them into this app's in-memory verified-account store."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('at least one account returned', () => pm.expect(json.accounts.length).to.be.above(0));",
+                  "const account = json.accounts[0];",
+                  "pm.collectionVariables.set('account_number', account.accountNumber);",
+                  "pm.environment.set('account_number', account.accountNumber);",
+                  "pm.collectionVariables.set('routing_number', account.routingNumber);",
+                  "pm.environment.set('routing_number', account.routingNumber);",
+                  "pm.collectionVariables.set('account_type', account.accountType);",
+                  "pm.environment.set('account_type', account.accountType);",
+                  "const fullName = account.ownerNames[0] || '';",
+                  "const spaceIndex = fullName.indexOf(' ');",
+                  "pm.collectionVariables.set('owner_first_name', spaceIndex === -1 ? fullName : fullName.slice(0, spaceIndex));",
+                  "pm.environment.set('owner_first_name', spaceIndex === -1 ? fullName : fullName.slice(0, spaceIndex));",
+                  "pm.collectionVariables.set('owner_last_name', spaceIndex === -1 ? '' : fullName.slice(spaceIndex + 1));",
+                  "pm.environment.set('owner_last_name', spaceIndex === -1 ? '' : fullName.slice(spaceIndex + 1));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 - Verify",
+      "item": [
+        {
+          "name": "Verify Bank Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"{{account_number}}\",\n  \"routingNumber\": \"{{routing_number}}\",\n  \"accountType\": \"{{account_type}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/verify/bankAccount",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "verify",
+                "bankAccount"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('verified is true', () => pm.expect(pm.response.json().verified).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Bank Account Owner - Matching Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"{{account_number}}\",\n  \"routingNumber\": \"{{routing_number}}\",\n  \"accountType\": \"{{account_type}}\",\n  \"firstName\": \"{{owner_first_name}}\",\n  \"lastName\": \"{{owner_last_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/verify/bankAccountOwner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "verify",
+                "bankAccountOwner"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('verified is true', () => pm.expect(pm.response.json().verified).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Bank Account Owner - Mismatched Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"{{account_number}}\",\n  \"routingNumber\": \"{{routing_number}}\",\n  \"accountType\": \"{{account_type}}\",\n  \"firstName\": \"Wrong\",\n  \"lastName\": \"Name\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/verify/bankAccountOwner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "verify",
+                "bankAccountOwner"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('verified is false', () => pm.expect(pm.response.json().verified).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
