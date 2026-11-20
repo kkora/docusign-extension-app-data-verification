@@ -15,6 +15,9 @@ env:
   TF_VAR_application_name: ${{ vars.APPLICATION_NAME }}
   TF_VAR_application_oauth_client_id: ${{ secrets.APPLICATION_OAUTH_CLIENT_ID }}
   TF_VAR_application_oauth_client_secret: ${{ secrets.APPLICATION_OAUTH_CLIENT_SECRET }}
+  TF_VAR_application_plaid_client_id: ${{ secrets.PLAID_CLIENT_ID }}
+  TF_VAR_application_plaid_secret: ${{ secrets.PLAID_SECRET }}
+  TF_VAR_application_plaid_env: ${{ vars.PLAID_ENV }}
   TF_VAR_location: ${{ vars.AZURE_LOCATION }}
   TF_VAR_execution_mode: ci
   ACR_NAME: ${{ vars.ACR_NAME }}

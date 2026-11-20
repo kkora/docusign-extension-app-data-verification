@@ -17,13 +17,18 @@ locals {
     DOCKER_ENABLE_CI                    = true
     WEBSITES_ENABLE_APP_SERVICE_STORAGE = false
     WEBSITES_PORT                       = var.application_port
+    PORT                                = var.application_port
   }
 
   application_webapp_container_settings = {
+    NODE_ENV            = var.application_node_env
     JWT_SECRET_KEY      = local.application_jwt_secret_key
     OAUTH_CLIENT_ID     = local.application_oauth_client_id
     OAUTH_CLIENT_SECRET = local.application_oauth_client_secret
     AUTHORIZATION_CODE  = local.application_authorization_code
+    PLAID_CLIENT_ID     = var.application_plaid_client_id
+    PLAID_SECRET        = var.application_plaid_secret
+    PLAID_ENV           = var.application_plaid_env
   }
 
   application_webapp_settings = merge(

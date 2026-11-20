@@ -253,6 +253,41 @@ variable "application_authorization_code" {
   default     = ""
 }
 
+variable "application_node_env" {
+  description = "The NODE_ENV value for the running container"
+  type        = string
+  nullable    = false
+  default     = "production"
+}
+
+variable "application_plaid_client_id" {
+  description = "The Plaid client ID for the application"
+  type        = string
+  sensitive   = true
+  nullable    = false
+  default     = ""
+}
+
+variable "application_plaid_secret" {
+  description = "The Plaid secret for the application"
+  type        = string
+  sensitive   = true
+  nullable    = false
+  default     = ""
+}
+
+variable "application_plaid_env" {
+  description = "The Plaid environment for the application ('sandbox' or 'production')"
+  type        = string
+  nullable    = false
+  default     = "sandbox"
+
+  validation {
+    condition     = contains(["sandbox", "production"], var.application_plaid_env)
+    error_message = "The Plaid environment must be one of 'sandbox' or 'production'"
+  }
+}
+
 variable "manifest_files_paths" {
   description = "The list of manifest files relative paths to generate"
   type        = list(string)

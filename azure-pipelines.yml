@@ -1,0 +1,95 @@
+trigger:
+  branches:
+    include:
+      - deploy
+
+pr:
+  branches:
+    include:
+      - deploy
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: docusign-verify-secrets
+  - name: applicationName
+    value: extension-app-data-verification
+  - name: azureLocation
+    value: eastus
+  - name: tfStateResourceGroup
+    value: rg-tfstate
+  - name: tfStateStorageAccount
+    value: tfstatedocusignverify
+  - name: tfStateContainer
+    value: tfstate
+  - name: tfStateKey
+    value: data-verification.tfstate
+
+steps:
+  - task: TerraformInstaller@1
+    displayName: 'Install Terraform'
+    inputs:
+      terraformVersion: '1.10.5'
+
+  - task: AzureCLI@2
+    displayName: 'Terraform plan'
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+    env:
+      APPLICATION_NAME: $(applicationName)
+      AZURE_LOCATION: $(azureLocation)
+      APPLICATION_OAUTH_CLIENT_ID: $(APPLICATION_OAUTH_CLIENT_ID)
+      APPLICATION_OAUTH_CLIENT_SECRET: $(APPLICATION_OAUTH_CLIENT_SECRET)
+      PLAID_CLIENT_ID: $(PLAID_CLIENT_ID)
+      PLAID_SECRET: $(PLAID_SECRET)
+      PLAID_ENV: $(PLAID_ENV)
+    inputs:
+      azureSubscription: 'azure-devops-docusign-verify'
+      addSpnToEnvironment: true
+      scriptType: bash
+      scriptLocation: inlineScript
+      workingDirectory: terraform/azure
+      inlineScript: |
+        set -euo pipefail
+        source "$(Build.SourcesDirectory)/ci/azure-devops/terraform-env.sh"
+        terraform init -upgrade -reconfigure \
+          -backend-config="resource_group_name=$(tfStateResourceGroup)" \
+          -backend-config="storage_account_name=$(tfStateStorageAccount)" \
+          -backend-config="container_name=$(tfStateContainer)" \
+          -backend-config="key=$(tfStateKey)" \
+          -backend-config="use_oidc=true"
+        terraform plan -out=tfplan
+        rm -f azure_ci.tf
+        mv providers.tf.bak providers.tf
+
+  - task: AzureCLI@2
+    displayName: 'Terraform apply'
+    condition: and(eq(variables['Build.Reason'], 'IndividualCI'), eq(variables['Build.SourceBranch'], 'refs/heads/deploy'))
+    env:
+      APPLICATION_NAME: $(applicationName)
+      AZURE_LOCATION: $(azureLocation)
+      APPLICATION_OAUTH_CLIENT_ID: $(APPLICATION_OAUTH_CLIENT_ID)
+      APPLICATION_OAUTH_CLIENT_SECRET: $(APPLICATION_OAUTH_CLIENT_SECRET)
+      PLAID_CLIENT_ID: $(PLAID_CLIENT_ID)
+      PLAID_SECRET: $(PLAID_SECRET)
+      PLAID_ENV: $(PLAID_ENV)
+    inputs:
+      azureSubscription: 'azure-devops-docusign-verify'
+      addSpnToEnvironment: true
+      scriptType: bash
+      scriptLocation: inlineScript
+      workingDirectory: terraform/azure
+      inlineScript: |
+        set -euo pipefail
+        source "$(Build.SourcesDirectory)/ci/azure-devops/terraform-env.sh"
+        terraform init -upgrade -reconfigure \
+          -backend-config="resource_group_name=$(tfStateResourceGroup)" \
+          -backend-config="storage_account_name=$(tfStateStorageAccount)" \
+          -backend-config="container_name=$(tfStateContainer)" \
+          -backend-config="key=$(tfStateKey)" \
+          -backend-config="use_oidc=true"
+        terraform plan -out=tfplan
+        terraform apply -auto-approve tfplan
+        terraform output
+        rm -f azure_ci.tf
+        mv providers.tf.bak providers.tf
